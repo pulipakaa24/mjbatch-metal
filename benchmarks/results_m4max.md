@@ -50,11 +50,45 @@ Status after 2026-08-16 work:
 3. Remaining: direct GPU-tensor handoff to a torch/MPS learner without the
    CPU-visible hop (needs a Metal buffer <-> MPS tensor bridge; no public
    Python path exists today — native-extension territory).
-Honest framing: absolute parity with a 450 W RTX 4090 is not reachable on
-~50 W laptop silicon. The comparable metric is performance-per-watt:
-**~1.45k env-fps/W here (72.7k @ ~50 W) vs ~0.9k fps/W there (403k @
-~450 W) — mjbatch-metal now exceeds madrona_mjx on efficiency**, and the
-remaining ~5.5x absolute gap is within the ~5-8x hardware differential.
+
+### On comparing against madrona_mjx: provenance and caveats
+
+A perf-per-watt superiority claim previously published here was RETRACTED
+after a provenance audit (2026-08-16). What the primary sources actually
+say, and how it maps to our numbers:
+
+- The widely-cited "madrona_mjx 403k FPS @64px" figure (via the
+  PyBatchRender paper's comparison table) traces to the MuJoCo Playground
+  paper, where it is an **end-to-end** figure — MJX GPU physics PLUS
+  rendering — on **CartpoleBalance** (a 2-3 geom scene), on datacenter
+  hardware (the paper's throughput sections reference an A100). Their
+  closest robot-scene figure is **PandaPickCubeCartesian: ~37,000
+  end-to-end steps/s**, roughly resolution-insensitive (physics-bound).
+- Our numbers in this file are **render-only** fps on our own scenes, on an
+  M4 Max laptop. Closest-in-spirit rows: primitives scene (cartpole-class
+  complexity) 72.7k render-fps @64px pipelined; SO-101 arm scene (closer to
+  Franka-class) 8.4-20k render-fps @128px.
+- These are NOT matched conditions: different scenes, different hardware,
+  physics included vs excluded, RGB(+depth?) modality unconfirmed on their
+  side, and neither side's power draw measured under the benchmark load.
+  We therefore publish **no perf/watt comparison**. The defensible
+  statements are: (a) batch rendering at RL-useful rates now exists
+  natively on Apple Silicon; (b) on a laptop, our render-only throughput on
+  a trivial scene is within ~5.5x of their datacenter end-to-end trivial-
+  scene figure.
+
+### Reproduce it yourself
+
+```
+python benchmarks/bench.py                    # our grid, your machine
+python benchmarks/bench.py your_scene.xml     # your own scene
+# real power draw during a run (macOS, needs sudo):
+sudo powermetrics --samplers gpu_power -i 500
+```
+If you have access to an NVIDIA machine with madrona_mjx, the honest
+comparison is: same scene translated to both, same resolution, same batch,
+render-only timings isolated on both sides, wall power measured on both
+sides. We would welcome such a result as an issue/PR.
 
 ## Context vs madrona_mjx
 

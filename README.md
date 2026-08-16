@@ -9,9 +9,8 @@ single GPU submission — the tiled-batch architecture of
 Metal (via [wgpu](https://github.com/pygfx/wgpu-py)), with no CUDA and no
 translation layers. It exists to make **pixels-to-actions RL training
 practical on a Mac**: on an M4 Max it renders ~20,000 composited 128×128
-observations per second on real robot scenes (72,000+/s at 64×64), which
-turns a 25M-step PPO-from-pixels run into a ~4-hour job — and on
-performance-per-watt it exceeds the CUDA-only reference implementation.
+observations per second on real robot scenes (72,000+/s at 64×64 on simple
+scenes), which turns a 25M-step PPO-from-pixels run into a ~4-hour job.
 
 ## Why this exists
 
@@ -84,10 +83,9 @@ env-frames/s at 64×64 with 1,024 environments** (pipelined readback) — see
 [`benchmarks/results_m4max.md`](benchmarks/results_m4max.md) for the full
 batch-size × resolution grid, the feature-coverage table versus madrona_mjx,
 and the honest cross-hardware comparison (madrona_mjx on an RTX 4090 is
-~5.5× faster at 64×64, within the ~5-8× hardware differential of a 450W
-desktop GPU vs 50W laptop silicon; on performance-per-watt mjbatch-metal is
-ahead (~1.45k vs ~0.9k env-fps/W) — the point is that RL-rate batch
-rendering exists
+a datacenter-hardware, physics-inclusive figure on a trivial scene —
+see the benchmarks doc for the full provenance audit and why we publish
+no perf/watt comparison; the point is that RL-rate batch rendering exists
 on Apple Silicon at all). Numbers are from one machine; treat them as
 indicative. Rendering stops being the bottleneck at these rates — in the
 end-to-end row the PPO update dominates.
