@@ -73,9 +73,19 @@ geoms (meshes decimated to ≤1,500 faces each), uncontended machine:
 | mjbatch-metal, batched N=64–256 | **~6,000–6,800 env-frames/s** |
 | end-to-end PPO (SB3, MPS learner, threaded physics, N=64) | ~1,700 env-steps/s |
 
-Numbers are from one machine and one scene; treat them as indicative.
-Rendering stops being the bottleneck at this point — in the end-to-end row
-the PPO update dominates.
+On the simpler primitives benchmark scene, throughput reaches **~46,000
+env-frames/s at 64×64 with 1,024 environments** — see
+[`benchmarks/results_m4max.md`](benchmarks/results_m4max.md) for the full
+batch-size × resolution grid, the feature-coverage table versus madrona_mjx,
+and the honest cross-hardware comparison (madrona_mjx on an RTX 4090 is
+still ~9× faster at 64×64; the point is that RL-rate batch rendering exists
+on Apple Silicon at all). Numbers are from one machine; treat them as
+indicative. Rendering stops being the bottleneck at these rates — in the
+end-to-end row the PPO update dominates.
+
+**Depth observations** are supported (`render(..., return_depth=True)`)
+returning metric depth, parity-tested against `mujoco.Renderer`'s depth
+output (median error < 1 cm on the test scene).
 
 ## Validation
 

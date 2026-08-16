@@ -339,7 +339,7 @@ class BatchRenderer:
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
         self.depth_tex = dev.create_texture(
             size=(self.aw, self.ah, 1), format=wgpu.TextureFormat.depth32float,
-            usage=wgpu.TextureUsage.RENDER_ATTACHMENT)
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
 
     # -- per-frame API ----------------------------------------------------
 
@@ -365,7 +365,8 @@ class BatchRenderer:
         P[3, 2] = -1.0
         return P
 
-    def render(self, datas, cam_pos, cam_quat, colors=None, light_dirs=None):
+    def render(self, datas, cam_pos, cam_quat, colors=None, light_dirs=None,
+               return_depth=False):
         """Render all envs; returns (N, height, width, 3) uint8 tiles.
 
         datas: list of N MjData (mj_forward'd).
@@ -373,6 +374,8 @@ class BatchRenderer:
             (MuJoCo camera convention: looks along -Z, +Y up).
         colors: (N, G, 4) RGBA per drawn geom; default = material colors.
         light_dirs: (N, 3) directional light per env.
+        return_depth: if True, also return (N, height, width) float32 METRIC
+            depth (meters along the camera axis; background = far plane).
         """
         dev = self.device
         if colors is None:
@@ -437,7 +440,21 @@ class BatchRenderer:
             r0 = (e // self.tpr) * self.th
             c0 = (e % self.tpr) * self.tw
             tiles[e] = atlas[r0:r0 + self.th, c0:c0 + self.tw]
-        return tiles
+        if not return_depth:
+            return tiles
+        dbuf = dev.queue.read_texture(
+            {"texture": self.depth_tex, "mip_level": 0, "origin": (0, 0, 0)},
+            {"offset": 0, "bytes_per_row": self.aw * 4, "rows_per_image": self.ah},
+            (self.aw, self.ah, 1))
+        datlas = np.frombuffer(dbuf, np.float32).reshape(self.ah, self.aw)
+        near, far = 0.01, 10.0
+        metric = near * far / (far - datlas * (far - near))
+        depth = np.empty((self.n, self.th, self.tw), np.float32)
+        for e in range(self.n):
+            r0 = (e // self.tpr) * self.th
+            c0 = (e % self.tpr) * self.tw
+            depth[e] = metric[r0:r0 + self.th, c0:c0 + self.tw]
+        return tiles, depth
 
 
 def _quat_to_mat(q):
