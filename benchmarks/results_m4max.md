@@ -44,4 +44,13 @@ batch rendering at RL-useful rates exists on Apple Silicon at all.
 | in-shader background compositing | no (post-hoc) | yes |
 | GPU-resident physics (MJX) | yes | no — physics is CPU (MuJoCo C, threaded); on Apple Silicon CPU physics is not the bottleneck |
 | CUDA graphs / JAX integration | yes | no |
+| textured / high-complexity scenes (e.g. Habitat, ~7M tris) | yes (~30K fps) | no — untextured Lambert shading; realism comes from compositing real photos instead |
 | platform | Linux + NVIDIA | macOS + Apple Silicon |
+
+Fidelity context: neither renderer targets photorealism — Madrona's stated
+purpose is high-throughput "pixels to actions" training, and its metrics are
+framerates, not visual quality. The fidelity gradient is: mjbatch-metal
+(flat-shaded, composited) < Madrona (textured complex scenes, still
+throughput-first) < photoreal engines (Isaac RTX/Omniverse, Unreal). Both
+ecosystems delegate photorealism to a second renderer; this project pairs
+with Unreal Engine for that tier.
