@@ -8,18 +8,25 @@ with no arguments). Scene complexity matters: the SO-101 arm scene
 
 | N envs | res | batches/s | env-frames/s |
 |---|---|---|---|
-| 16 | 64 | 516 | 8,254 |
-| 64 | 64 | 336 | 21,504 |
-| 256 | 64 | 147 | 37,565 |
-| 1024 | 64 | 45 | 46,047 |
-| 16 | 128 | 400 | 6,399 |
-| 64 | 128 | 200 | 12,818 |
-| 256 | 128 | 64 | 16,327 |
-| 1024 | 128 | 17 | 17,425 |
-| 16 | 256 | 219 | 3,511 |
-| 64 | 256 | 71 | 4,516 |
-| 256 | 256 | 19 | 4,873 |
-| 1024 | 256 | 5 | 4,963 |
+| 16 | 64 | 518 | 8,288 |
+| 64 | 64 | 335 | 21,438 |
+| 256 | 64 | 124 | 31,731 |
+| 1024 | 64 | 34 | 34,375 |
+| 16 | 128 | 388 | 6,213 |
+| 64 | 128 | 190 | 12,142 |
+| 256 | 128 | 53 | 13,531 |
+| 1024 | 128 | 11 | 11,192 |
+| 16 | 256 | 223 | 3,572 |
+| 64 | 256 | 64 | 4,070 |
+| 256 | 256 | 15 | 3,936 |
+| 1024 | 256 | 3 | 3,157 |
+
+High-complexity scene (SO-101 arm, UNDECIMATED, 348k faces -> 162k indexed
+verts): **8,365 env-frames/s** at 128 px, N=64. (The earlier unindexed
+architecture managed 2,540 on this scene and needed mesh decimation to reach
+6,000; indexed unique-mesh instancing made decimation optional.)
+Texture parity: grayscale pattern correlation vs mujoco.Renderer on a
+checkerboard+gradient scene = **0.994**.
 
 
 ## Context vs madrona_mjx
@@ -44,13 +51,18 @@ batch rendering at RL-useful rates exists on Apple Silicon at all.
 | in-shader background compositing | no (post-hoc) | yes |
 | GPU-resident physics (MJX) | yes | no — physics is CPU (MuJoCo C, threaded); on Apple Silicon CPU physics is not the bottleneck |
 | CUDA graphs / JAX integration | yes | no |
-| textured / high-complexity scenes (e.g. Habitat, ~7M tris) | yes (~30K fps) | no — untextured Lambert shading; realism comes from compositing real photos instead |
+| textures (MuJoCo materials, mesh UVs, planes/boxes) | yes | yes — atlas-packed, parity 0.994 vs mujoco.Renderer (`test_textures.py`) |
+| high-complexity scenes | yes (~30K fps @ 7M tris, RTX 4090) | indexed unique-mesh instancing; 8.4K env-fps on a 348K-tri scene (M4 Max); no culling/LOD yet |
 | platform | Linux + NVIDIA | macOS + Apple Silicon |
 
-Fidelity context: neither renderer targets photorealism — Madrona's stated
-purpose is high-throughput "pixels to actions" training, and its metrics are
-framerates, not visual quality. The fidelity gradient is: mjbatch-metal
-(flat-shaded, composited) < Madrona (textured complex scenes, still
-throughput-first) < photoreal engines (Isaac RTX/Omniverse, Unreal). Both
-ecosystems delegate photorealism to a second renderer; this project pairs
-with Unreal Engine for that tier.
+Fidelity context: neither renderer targets photorealism — both are
+throughput-first "pixels to actions" renderers; photorealism is delegated to
+a second engine in both ecosystems (Isaac RTX/Omniverse there, Unreal here).
+With textures and indexed high-complexity geometry, mjbatch-metal now covers
+Madrona's fidelity tier (minus shadows); remaining gaps are performance
+architecture (culling/LOD for multi-million-triangle scenes) rather than
+feature class.
+
+Determinism contract: identical calls are byte-identical; identical content
+in different atlas tiles is identical except at z-fighting pixels of
+interpenetrating geometry (measured ~0.01% of pixels on a stress scene).

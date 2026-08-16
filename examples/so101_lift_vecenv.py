@@ -98,7 +98,7 @@ class BatchPixelVecEnv(VecEnv):
         self._cam_pos0 = self.models[0].cam_pos[self._cam_id].copy()
         self._cam_quat0 = self.models[0].cam_quat[self._cam_id].copy()
 
-        self.renderer = BatchRenderer(m0, n_envs, width=TILE, height=TILE, camera="base_cam")
+        self.renderer = BatchRenderer(m0, n_envs, width=TILE, height=TILE, camera="base_cam", include_planes=False, use_backgrounds=True)
         self._backgrounds = _load_bg_dir()
         self.G = self.renderer.G
         self._box_slot = self.renderer.geoms.index(self._box_geom)

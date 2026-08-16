@@ -83,7 +83,7 @@ def test_batch_tiles_shape(model):
 
 
 def test_backgrounds_composited(model):
-    r = BatchRenderer(model, 1, width=128, height=128, camera="cam")
+    r = BatchRenderer(model, 1, width=128, height=128, camera="cam", include_planes=False)
     cid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "cam")
     d = mujoco.MjData(model)
     mujoco.mj_forward(model, d)

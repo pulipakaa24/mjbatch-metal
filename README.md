@@ -47,14 +47,19 @@ One `render()` call per simulation step, for all environments at once:
   first; only robot/object pixels are drawn over it. The color attachment
   *is* the finished, composited observation — one readback per frame, and on
   Apple Silicon that readback lands in unified memory.
-- **Geometry once**: meshes (optionally quadric-decimated — dense visual
-  meshes make the renderer vertex-bound), boxes, spheres, cylinders,
-  capsules, planes; flat per-face normals; MuJoCo material colors resolved
-  as defaults.
+- **Geometry once, indexed, instanced per unique mesh**: each distinct mesh
+  or primitive is stored once (smooth normals, UVs) and drawn with one
+  instanced call covering every (env, geom) pair that uses it — the same
+  structure Madrona/PyBatchRender use, which is what lets an undecimated
+  348k-triangle scene render at 8.4K env-frames/s. Optional quadric
+  decimation remains available.
+- **Textures**: MuJoCo materials and textures (mesh UVs, planes, boxes) are
+  atlas-packed and sampled in-shader; pattern parity vs `mujoco.Renderer`
+  measured at 0.994 correlation. Per-env DR colors modulate textures.
 
 ### What it deliberately does not do
 
-Lambertian flat shading only. No shadows, no textures, no photorealism.
+Lambertian smooth shading with textures — but no shadows and no photorealism.
 This is a renderer for **domain-randomized, background-composited RL
 observations** — the observation style validated by sim-to-real work such as
 [lerobot-sim2real](https://github.com/StoneT2000/lerobot-sim2real) (91.6%

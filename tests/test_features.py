@@ -108,7 +108,7 @@ def test_large_batch_1024(model):
 def test_two_cameras_same_env(model):
     """Multi-camera observation: render the same env from two cameras."""
     d = _data(model)
-    r = BatchRenderer(model, 1, width=128, height=128, camera="cam")
+    r = BatchRenderer(model, 1, width=128, height=128, camera="cam", include_planes=False)
     c1 = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "cam")
     c2 = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "top")
     r.set_backgrounds([0], [np.zeros((128, 128, 3), np.uint8)])
