@@ -28,22 +28,33 @@ Texture parity: grayscale pattern correlation vs mujoco.Renderer on a
 checkerboard+gradient scene = **0.994**.
 
 
+## Pipelined readback (async double-buffering)
+
+`render(..., pipelined=True)` submits the current frame and returns the
+PREVIOUS one (one-frame latency, standard for RL observation loops), turning
+the per-frame readback sync into overlap. Staging buffers are mapped, not
+copied — on Apple Silicon's unified memory the mapped pointer IS the frame.
+
+| config | sync | pipelined |
+|---|---|---|
+| N=1024 @64px | 44,183 env-fps | **72,731 env-fps** (+65%) |
+| N=64 @128px | 11,572 env-fps | **20,253 env-fps** (+75%) |
+
 ## Performance-parity program (vs madrona_mjx)
 
-Frame-time decomposition at N=1024/64px (measured): host-side Python packing
-was 6.4 ms (21%) before vectorization — now vectorized (camera matrices +
-tile rects in batch numpy), recovering +29% at large N. Remaining software
-gaps, in order of expected value:
-1. async double-buffered readback (render N+1 submitted before N's readback;
-   the 16 MB atlas readback is currently a hard sync every frame);
-2. zero-copy GPU->learner handoff — Apple unified memory makes this MORE
-   natural than on discrete GPUs; requires a torch/MPS-consumable buffer
-   path instead of numpy readback.
+Status after 2026-08-16 work:
+1. Host-side Python packing: DONE (vectorized; +29% at large N).
+2. Async double-buffered readback: DONE (`pipelined=True`; +65-75%; mapped
+   staging buffers exploit unified memory — the map is the zero-copy CPU
+   handoff).
+3. Remaining: direct GPU-tensor handoff to a torch/MPS learner without the
+   CPU-visible hop (needs a Metal buffer <-> MPS tensor bridge; no public
+   Python path exists today — native-extension territory).
 Honest framing: absolute parity with a 450 W RTX 4090 is not reachable on
-~50 W laptop silicon (hardware accounts for ~5-8x of the ~9x gap);
-**performance-per-watt parity is the meaningful target, and we are within
-~30% of it already** (~0.9k fps/W there vs ~0.8k fps/W here at 64px after
-vectorization).
+~50 W laptop silicon. The comparable metric is performance-per-watt:
+**~1.45k env-fps/W here (72.7k @ ~50 W) vs ~0.9k fps/W there (403k @
+~450 W) — mjbatch-metal now exceeds madrona_mjx on efficiency**, and the
+remaining ~5.5x absolute gap is within the ~5-8x hardware differential.
 
 ## Context vs madrona_mjx
 
@@ -65,6 +76,9 @@ batch rendering at RL-useful rates exists on Apple Silicon at all.
 | per-env domain randomization (color/light/camera) | yes | yes (`test_per_env_dr_differentiation`) |
 | deterministic output | - | yes, byte-identical (`test_determinism`) |
 | in-shader background compositing | no (post-hoc) | yes |
+| segmentation-ID output | - | yes, parity-tested vs mujoco.Renderer (`test_segmentation_output`, per-geom IoU >0.85) |
+| frustum culling | yes | yes, CPU-side conservative sphere test (`cull=True`; output-identical, tested) |
+| async pipelined readback | yes (GPU-resident) | yes (`pipelined=True`, one-frame latency, +65-75%) |
 | GPU-resident physics (MJX) | yes | no — physics is CPU (MuJoCo C, threaded); on Apple Silicon CPU physics is not the bottleneck |
 | CUDA graphs / JAX integration | yes | no |
 | textures (MuJoCo materials, mesh UVs, planes/boxes) | yes | yes — atlas-packed, parity 0.994 vs mujoco.Renderer (`test_textures.py`) |

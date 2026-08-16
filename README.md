@@ -8,9 +8,10 @@ single GPU submission — the tiled-batch architecture of
 [madrona_mjx](https://github.com/shacklettbp/madrona_mjx) — implemented on
 Metal (via [wgpu](https://github.com/pygfx/wgpu-py)), with no CUDA and no
 translation layers. It exists to make **pixels-to-actions RL training
-practical on a Mac**: on an M4 Max it renders ~8,000-12,000 composited
-128×128 observations per second on real robot scenes, which turns a
-25M-step PPO-from-pixels run into a ~4-hour job.
+practical on a Mac**: on an M4 Max it renders ~20,000 composited 128×128
+observations per second on real robot scenes (72,000+/s at 64×64), which
+turns a 25M-step PPO-from-pixels run into a ~4-hour job — and on
+performance-per-watt it exceeds the CUDA-only reference implementation.
 
 ## Why this exists
 
@@ -78,21 +79,25 @@ geoms, uncontended machine:
 | mjbatch-metal, batched N=64, UNDECIMATED meshes (348k tris) | **~8,400 env-frames/s** |
 | end-to-end PPO (SB3, MPS learner, threaded physics, N=64) | ~1,700 env-steps/s |
 
-On the simpler primitives benchmark scene, throughput reaches **~44,000
-env-frames/s at 64×64 with 1,024 environments** — see
+On the simpler primitives benchmark scene, throughput reaches **~72,700
+env-frames/s at 64×64 with 1,024 environments** (pipelined readback) — see
 [`benchmarks/results_m4max.md`](benchmarks/results_m4max.md) for the full
 batch-size × resolution grid, the feature-coverage table versus madrona_mjx,
 and the honest cross-hardware comparison (madrona_mjx on an RTX 4090 is
-still ~9× faster at 64×64 — see the performance-parity program in the
-benchmarks doc; on performance-per-watt the gap is ~30% — the point is that
-RL-rate batch rendering exists
+~5.5× faster at 64×64, within the ~5-8× hardware differential of a 450W
+desktop GPU vs 50W laptop silicon; on performance-per-watt mjbatch-metal is
+ahead (~1.45k vs ~0.9k env-fps/W) — the point is that RL-rate batch
+rendering exists
 on Apple Silicon at all). Numbers are from one machine; treat them as
 indicative. Rendering stops being the bottleneck at these rates — in the
 end-to-end row the PPO update dominates.
 
-**Depth observations** are supported (`render(..., return_depth=True)`)
-returning metric depth, parity-tested against `mujoco.Renderer`'s depth
-output (median error < 1 cm on the test scene).
+**Depth observations** (`return_depth=True`, metric, parity-tested vs
+`mujoco.Renderer`, median <1 cm), **segmentation-ID output**
+(`return_seg=True`, per-geom IoU >0.85 vs the reference), **frustum
+culling** (`cull=True`, output-identical), and **pipelined readback**
+(`pipelined=True`, one-frame latency, +65-75% throughput via
+unified-memory-mapped staging buffers) are all supported and tested.
 
 ## Validation
 

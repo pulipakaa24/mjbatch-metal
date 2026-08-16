@@ -9,18 +9,19 @@ scope covers the domain-randomized, background-composited observation style
 
 1. ~~**Textures.**~~ DONE (2026-08-16): atlas-packed MuJoCo textures with
    mesh/plane/box UVs, parity-tested (pattern correlation 0.994).
-2. **Segmentation-ID output.** The instanced geom ID is already in the
-   vertex stream; exposing it as an optional second render target is small
-   and enables mask-based pipelines that don't want compositing.
+2. ~~**Segmentation-ID output.**~~ DONE (2026-08-16): r32uint MRT target,
+   `return_seg=True`, parity-tested (per-geom IoU >0.85).
 3. **Non-square tiles / per-env resolution presets; camera intrinsics from
    `sensorsize`/`focal`** (currently fovy-based projection only).
 
 ## Larger rework (waits for a concrete use case)
 
 4. **High-complexity scenes**: indexed geometry + per-unique-mesh
-   instanced draws DONE (2026-08-16; 348k-tri scene at 8.4K env-fps without
-   decimation). Remaining for Habitat-class (millions of triangles):
-   frustum culling and LOD.
+   instanced draws DONE; frustum culling DONE (`cull=True`, 2026-08-16).
+   Remaining for Habitat-class (millions of triangles): LOD — deferred
+   until a real multi-resolution asset set exists to validate against
+   (untested LOD would be feature theater; manual decimation levels are
+   available today via `decimate_faces`).
 5. **Shadows / richer shading** for users whose observations are NOT
    composited. Deliberate non-goal while compositing covers realism.
 6. **Dual geometry paths (monolithic unindexed vs indexed per-mesh),

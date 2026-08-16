@@ -93,8 +93,13 @@ fn vs_main(in: VSIn) -> VSOut {
     return out;
 }
 
+struct FSOut {
+    @location(0) color: vec4<f32>,
+    @location(1) seg: u32,
+};
+
 @fragment
-fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+fn fs_main(in: VSOut) -> FSOut {
     let e = envs[in.env];
     let tile_w = {TILE_W}.0;
     let tile_h = {TILE_H}.0;
@@ -114,7 +119,10 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
     let n = normalize(in.normal_w);
     let ndl = clamp(dot(n, -e.light.xyz), 0.0, 1.0);
     let shade = 0.35 + 0.65 * ndl;
-    return vec4<f32>(base * shade, 1.0);
+    var out: FSOut;
+    out.color = vec4<f32>(base * shade, 1.0);
+    out.seg = in.slot + 1u;
+    return out;
 }
 
 struct BGOut {
@@ -137,9 +145,17 @@ fn bg_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) env: u32) -> B
     return out;
 }
 
+struct BGFSOut {
+    @location(0) color: vec4<f32>,
+    @location(1) seg: u32,
+};
+
 @fragment
-fn bg_fs(in: BGOut) -> @location(0) vec4<f32> {
-    return textureSampleLevel(bg_tex, bg_samp, in.uv, i32(in.env), 0.0);
+fn bg_fs(in: BGOut) -> BGFSOut {
+    var out: BGFSOut;
+    out.color = textureSampleLevel(bg_tex, bg_samp, in.uv, i32(in.env), 0.0);
+    out.seg = 0u;
+    return out;
 }
 """
 
@@ -359,7 +375,8 @@ class BatchRenderer:
                 verts, normals, uvs, idx = _tris_to_indexed(tri, uv)
                 mesh_cache[key] = len(self._meshes)
                 self._meshes.append({"v_off": v_off, "i_off": i_off,
-                                     "i_count": idx.size})
+                                     "i_count": idx.size,
+                                     "radius": float(np.linalg.norm(verts, axis=1).max())})
                 all_v.append(verts); all_n.append(normals); all_uv.append(uvs)
                 all_i.append(idx.reshape(-1) + v_off)
                 v_off += len(verts)
@@ -437,7 +454,8 @@ class BatchRenderer:
         self.xbuf = dev.create_buffer(size=self.n * self.G * 64,
                                       usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
         self.tbuf = dev.create_buffer_with_data(
-            data=self._inst_table.tobytes(), usage=wgpu.BufferUsage.STORAGE)
+            data=self._inst_table.tobytes(),
+            usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
         self.mbuf = dev.create_buffer_with_data(
             data=self._mats.tobytes(), usage=wgpu.BufferUsage.STORAGE)
         ai = self._atlas.image
@@ -501,7 +519,8 @@ class BatchRenderer:
             primitive={"topology": wgpu.PrimitiveTopology.triangle_list, "cull_mode": wgpu.CullMode.none},
             depth_stencil=ds, multisample={"count": 1},
             fragment={"module": shader, "entry_point": "fs_main",
-                      "targets": [{"format": wgpu.TextureFormat.rgba8unorm}]})
+                      "targets": [{"format": wgpu.TextureFormat.rgba8unorm},
+                                  {"format": wgpu.TextureFormat.r32uint}]})
         self.bg_pipe = dev.create_render_pipeline(
             layout=layout,
             vertex={"module": shader, "entry_point": "bg_vs", "buffers": []},
@@ -510,13 +529,31 @@ class BatchRenderer:
                            "depth_write_enabled": False, "depth_compare": wgpu.CompareFunction.always},
             multisample={"count": 1},
             fragment={"module": shader, "entry_point": "bg_fs",
-                      "targets": [{"format": wgpu.TextureFormat.rgba8unorm}]})
+                      "targets": [{"format": wgpu.TextureFormat.rgba8unorm},
+                                  {"format": wgpu.TextureFormat.r32uint}]})
         self.color_tex = dev.create_texture(
             size=(self.aw, self.ah, 1), format=wgpu.TextureFormat.rgba8unorm,
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
         self.depth_tex = dev.create_texture(
             size=(self.aw, self.ah, 1), format=wgpu.TextureFormat.depth32float,
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
+        self.seg_tex = dev.create_texture(
+            size=(self.aw, self.ah, 1), format=wgpu.TextureFormat.r32uint,
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
+        # staging buffers for pipelined readback (unified memory: mapping is
+        # effectively zero-copy on Apple Silicon)
+        self._row_bytes = (self.aw * 4 + 255) // 256 * 256
+        self._staging = [dev.create_buffer(size=self._row_bytes * self.ah,
+                                           usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ)
+                         for _ in range(2)]
+        self._staging_slot = 0
+        self._pending = None       # slot with an in-flight frame
+        # culling state
+        self._mesh_radius = np.zeros(len(self._meshes))
+        self._geom_radius = np.array([self._mesh_radius_of(mi) for mi in self._geom_mesh])
+
+    def _mesh_radius_of(self, mi):
+        return self._meshes[mi].get("radius", 0.0)
 
     # -- per-frame API ----------------------------------------------------
 
@@ -545,7 +582,8 @@ class BatchRenderer:
         return P
 
     def render(self, datas, cam_pos, cam_quat, colors=None, light_dirs=None,
-               return_depth=False):
+               return_depth=False, return_seg=False, cull=False,
+               pipelined=False):
         """Render all envs; returns (N, height, width, 3) uint8 tiles.
 
         datas: list of N MjData (mj_forward'd).
@@ -555,6 +593,14 @@ class BatchRenderer:
             default = material colors.
         light_dirs: (N, 3) directional light per env.
         return_depth: also return (N, height, width) float32 metric depth.
+        return_seg: also return (N, height, width) uint32 segmentation ids
+            (0 = background, i+1 = draw-order slot i; see .geoms for the
+            model geom id of each slot).
+        cull: frustum-cull (env, geom) instances on the CPU before drawing —
+            wins when most instances are off-camera (large scenes).
+        pipelined: submit this frame and return the PREVIOUS frame's tiles
+            (one-frame latency, hides readback sync; returns None on the
+            first call). Incompatible with return_depth/return_seg.
         """
         dev = self.device
         if colors is None:
@@ -594,10 +640,38 @@ class BatchRenderer:
         dev.queue.write_buffer(self.ebuf, 0, edata.tobytes())
         dev.queue.write_buffer(self.xbuf, 0, xf.tobytes())
 
+        draws = self._draws
+        if cull:
+            # conservative sphere-vs-clip test per (env, geom)
+            centers = np.concatenate([pall, np.ones((self.n, self.G, 1))], axis=2)
+            vp4 = vp  # (N,4,4) from above
+            clip = np.einsum("nij,ngj->ngi", vp4.astype(np.float64), centers)
+            w = clip[..., 3]
+            rad = self._geom_radius[None, :]
+            margin = w + rad * 2.0
+            vis = ((clip[..., 0] > -margin) & (clip[..., 0] < margin) &
+                   (clip[..., 1] > -margin) & (clip[..., 1] < margin) &
+                   (w + rad > 0))
+            table, draws = [], []
+            first = 0
+            for mi, mesh in enumerate(self._meshes):
+                slots = [sl for sl, mm in enumerate(self._geom_mesh) if mm == mi]
+                pairs = [(e, sl) for sl in slots for e in np.flatnonzero(vis[:, sl])]
+                if pairs:
+                    table.extend(pairs)
+                    draws.append((mesh["i_off"], mesh["i_count"], first, len(pairs)))
+                    first += len(pairs)
+            if table:
+                tbl = np.asarray(table, np.uint32)
+                dev.queue.write_buffer(self.tbuf, 0, tbl.tobytes())
+
         enc = dev.create_command_encoder()
         rp = enc.begin_render_pass(
             color_attachments=[{"view": self.color_tex.create_view(),
                                 "clear_value": (0, 0, 0, 1),
+                                "load_op": wgpu.LoadOp.clear, "store_op": wgpu.StoreOp.store},
+                               {"view": self.seg_tex.create_view(),
+                                "clear_value": (0, 0, 0, 0),
                                 "load_op": wgpu.LoadOp.clear, "store_op": wgpu.StoreOp.store}],
             depth_stencil_attachment={"view": self.depth_tex.create_view(),
                                       "depth_clear_value": 1.0,
@@ -611,9 +685,40 @@ class BatchRenderer:
         rp.set_bind_group(0, self.bind)
         rp.set_vertex_buffer(0, self.vbuf)
         rp.set_index_buffer(self.ibuf, wgpu.IndexFormat.uint32)
-        for i_off, i_count, first, count in self._draws:
+        for i_off, i_count, first, count in draws:
             rp.draw_indexed(i_count, count, i_off, 0, first)
         rp.end()
+        if cull and draws is not self._draws:
+            # restore static table for subsequent non-culled calls
+            self._table_dirty = True
+        elif getattr(self, "_table_dirty", False):
+            dev.queue.write_buffer(self.tbuf, 0, self._inst_table.tobytes())
+            self._table_dirty = False
+        if pipelined:
+            slot = self._staging_slot
+            enc.copy_texture_to_buffer(
+                {"texture": self.color_tex, "mip_level": 0, "origin": (0, 0, 0)},
+                {"buffer": self._staging[slot], "offset": 0,
+                 "bytes_per_row": self._row_bytes, "rows_per_image": self.ah},
+                (self.aw, self.ah, 1))
+            dev.queue.submit([enc.finish()])
+            prev = self._pending
+            self._pending = slot
+            self._staging_slot = 1 - slot
+            if prev is None:
+                return None
+            sb = self._staging[prev]
+            sb.map_sync(wgpu.MapMode.READ)
+            raw = np.frombuffer(sb.read_mapped(), np.uint8)
+            sb.unmap()
+            atlas = raw.reshape(self.ah, self._row_bytes)[:, :self.aw * 4]
+            atlas = atlas.reshape(self.ah, self.aw, 4)[:, :, :3]
+            tiles = np.empty((self.n, self.th, self.tw, 3), np.uint8)
+            for e in range(self.n):
+                r0 = (e // self.tpr) * self.th
+                c0 = (e % self.tpr) * self.tw
+                tiles[e] = atlas[r0:r0 + self.th, c0:c0 + self.tw]
+            return tiles
         dev.queue.submit([enc.finish()])
         buf = dev.queue.read_texture(
             {"texture": self.color_tex, "mip_level": 0, "origin": (0, 0, 0)},
@@ -625,8 +730,21 @@ class BatchRenderer:
             r0 = (e // self.tpr) * self.th
             c0 = (e % self.tpr) * self.tw
             tiles[e] = atlas[r0:r0 + self.th, c0:c0 + self.tw]
-        if not return_depth:
+        if return_seg:
+            sgbuf = dev.queue.read_texture(
+                {"texture": self.seg_tex, "mip_level": 0, "origin": (0, 0, 0)},
+                {"offset": 0, "bytes_per_row": self.aw * 4, "rows_per_image": self.ah},
+                (self.aw, self.ah, 1))
+            satlas = np.frombuffer(sgbuf, np.uint32).reshape(self.ah, self.aw)
+            seg = np.empty((self.n, self.th, self.tw), np.uint32)
+            for e in range(self.n):
+                r0 = (e // self.tpr) * self.th
+                c0 = (e % self.tpr) * self.tw
+                seg[e] = satlas[r0:r0 + self.th, c0:c0 + self.tw]
+        if not return_depth and not return_seg:
             return tiles
+        if not return_depth:
+            return tiles, seg
         dbuf = dev.queue.read_texture(
             {"texture": self.depth_tex, "mip_level": 0, "origin": (0, 0, 0)},
             {"offset": 0, "bytes_per_row": self.aw * 4, "rows_per_image": self.ah},
@@ -639,6 +757,8 @@ class BatchRenderer:
             r0 = (e // self.tpr) * self.th
             c0 = (e % self.tpr) * self.tw
             depth[e] = metric[r0:r0 + self.th, c0:c0 + self.tw]
+        if return_seg:
+            return tiles, depth, seg
         return tiles, depth
 
 
