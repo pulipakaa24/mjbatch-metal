@@ -82,11 +82,11 @@ On the simpler primitives benchmark scene, throughput reaches **~72,700
 env-frames/s at 64×64 with 1,024 environments** (pipelined readback) — see
 [`benchmarks/results_m4max.md`](benchmarks/results_m4max.md) for the full
 batch-size × resolution grid, the feature-coverage table versus madrona_mjx,
-and the honest cross-hardware comparison (madrona_mjx on an RTX 4090 is
-a datacenter-hardware, physics-inclusive figure on a trivial scene —
-see the benchmarks doc for the full provenance audit and why we publish
-no perf/watt comparison; the point is that RL-rate batch rendering exists
-on Apple Silicon at all). Numbers are from one machine; treat them as
+and the provenance audit of the oft-cited madrona_mjx throughput figures
+(they turn out to be end-to-end physics-inclusive numbers on trivial scenes
+and datacenter hardware — not renderer-only comparisons — which is why this
+project publishes no cross-platform perf/watt claim and instead ships
+reproduce-it-yourself instructions). Numbers are from one machine; treat them as
 indicative. Rendering stops being the bottleneck at these rates — in the
 end-to-end row the PPO update dominates.
 
