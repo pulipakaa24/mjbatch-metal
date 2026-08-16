@@ -51,37 +51,36 @@ Status after 2026-08-16 work:
    CPU-visible hop (needs a Metal buffer <-> MPS tensor bridge; no public
    Python path exists today — native-extension territory).
 
-### On comparing against madrona_mjx: provenance and caveats
+### End-to-end comparison vs MuJoCo Playground (MJX + madrona_mjx)
 
-A perf-per-watt superiority claim previously published here was RETRACTED
-after a provenance audit (2026-08-16). What the primary sources actually
-say, and how it maps to our numbers:
+MuJoCo Playground's published figures are END-TO-END environment steps/s
+(GPU physics + rendering, no learner). `benchmarks/end_to_end.py` measures
+the same quantity on this stack (threaded CPU MuJoCo physics + batched
+pipelined rendering). Same methodology, different hardware — disclosed:
 
-- The widely-cited "madrona_mjx 403k FPS @64px" figure (via the
-  PyBatchRender paper's comparison table) traces to the MuJoCo Playground
-  paper, where it is an **end-to-end** figure — MJX GPU physics PLUS
-  rendering — on **CartpoleBalance** (a 2-3 geom scene), on datacenter
-  hardware (the paper's throughput sections reference an A100). Their
-  closest robot-scene figure is **PandaPickCubeCartesian: ~37,000
-  end-to-end steps/s**, roughly resolution-insensitive (physics-bound).
-- Our numbers in this file are **render-only** fps on our own scenes, on an
-  M4 Max laptop. Closest-in-spirit rows: primitives scene (cartpole-class
-  complexity) 72.7k render-fps @64px pipelined; SO-101 arm scene (closer to
-  Franka-class) 8.4-20k render-fps @128px.
-- These are NOT matched conditions: different scenes, different hardware,
-  physics included vs excluded, RGB(+depth?) modality unconfirmed on their
-  side, and neither side's power draw measured under the benchmark load.
-  We therefore publish **no perf/watt comparison**. The defensible
-  statements are: (a) batch rendering at RL-useful rates now exists
-  natively on Apple Silicon; (b) on a laptop, our render-only throughput on
-  a trivial scene is within ~5.5x of their datacenter end-to-end trivial-
-  scene figure.
+| scene class | theirs (datacenter GPU, MJX physics) | ours (M4 Max laptop, CPU physics) |
+|---|---|---|
+| cartpole-class, 64px | ~403,000 steps/s (CartpoleBalance) | **52,900-53,600 steps/s** (N=1024-4096; plateau = CPU physics-thread saturation) |
+| arm pick-cube class, 128px | ~37,000 steps/s (PandaPickCubeCartesian, ~resolution-insensitive) | **16,957 steps/s** (SO-101 arm scene, N=64) |
+
+Reading: on trivial scenes their GPU-resident physics dominates (7.5x);
+on robot-scale scenes — the ones people train — the gap is **2.2x**, on a
+laptop, with no CUDA. Neither side's power draw is measured; no perf/watt
+claim is made (a 4090/A100-class board alone draws several times this
+laptop's total power).
+
+Note the provenance of the widely-cited "403k fps" number: it is this
+end-to-end CartpoleBalance figure from the MuJoCo Playground paper, not a
+renderer-only benchmark; render-only comparisons against it are
+apples-to-oranges in both directions.
 
 ### Reproduce it yourself
 
 ```
-python benchmarks/bench.py                    # our grid, your machine
+python benchmarks/bench.py                    # render-only grid
 python benchmarks/bench.py your_scene.xml     # your own scene
+python benchmarks/end_to_end.py               # physics+render, cartpole-class
+python benchmarks/end_to_end.py scene.xml 64 128   # your robot scene
 # real power draw during a run (macOS, needs sudo):
 sudo powermetrics --samplers gpu_power -i 500
 ```
@@ -111,7 +110,7 @@ batch rendering at RL-useful rates exists on Apple Silicon at all.
 | deterministic output | - | yes, byte-identical (`test_determinism`) |
 | in-shader background compositing | no (post-hoc) | yes |
 | segmentation-ID output | - | yes, parity-tested vs mujoco.Renderer (`test_segmentation_output`, per-geom IoU >0.85) |
-| frustum culling | yes | yes, CPU-side conservative sphere test (`cull=True`; output-identical, tested) |
+| frustum culling | not verified from their docs | yes, CPU-side conservative sphere test (`cull=True`; output-identical, tested) |
 | async pipelined readback | yes (GPU-resident) | yes (`pipelined=True`, one-frame latency, +65-75%) |
 | GPU-resident physics (MJX) | yes | no — physics is CPU (MuJoCo C, threaded); on Apple Silicon CPU physics is not the bottleneck |
 | CUDA graphs / JAX integration | yes | no |

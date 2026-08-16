@@ -8,9 +8,11 @@ single GPU submission — the tiled-batch architecture of
 [madrona_mjx](https://github.com/shacklettbp/madrona_mjx) — implemented on
 Metal (via [wgpu](https://github.com/pygfx/wgpu-py)), with no CUDA and no
 translation layers. It exists to make **pixels-to-actions RL training
-practical on a Mac**: on an M4 Max it renders ~20,000 composited 128×128
-observations per second on real robot scenes (72,000+/s at 64×64 on simple
-scenes), which turns a 25M-step PPO-from-pixels run into a ~4-hour job.
+practical on a Mac**: on an M4 Max it renders ~19,000 composited 128×128
+observations per second on a real robot scene (72,000+/s at 64×64 on simple
+scenes), and runs full physics+rendering environment loops within ~2.2× of
+MuJoCo Playground's published Franka-class figure — on a laptop, with no
+CUDA. A 25M-step PPO-from-pixels run is a ~4-hour job.
 
 ## Why this exists
 
@@ -75,7 +77,7 @@ geoms, uncontended machine:
 |---|---|
 | `mujoco.Renderer`, one view per call (baseline) | ~71 fps/process |
 | mjbatch-metal, single view | ~380 fps |
-| mjbatch-metal, batched N=64, UNDECIMATED meshes (348k tris) | **~8,400 env-frames/s** |
+| mjbatch-metal, batched N=64, UNDECIMATED meshes (348k tris) | **~19,000 env-frames/s** (pipelined; 8.4k sync) |
 | end-to-end PPO (SB3, MPS learner, threaded physics, N=64) | ~1,700 env-steps/s |
 
 On the simpler primitives benchmark scene, throughput reaches **~72,700
@@ -103,10 +105,11 @@ The test suite renders random states through both `mujoco.Renderer` and
 `mjbatch-metal` and requires foreground-silhouette IoU > 0.90 (measured
 0.96–0.98 on our scenes). Colors are *not* asserted equal: the shading
 models differ by design, and the intended use randomizes colors and lighting
-anyway. In a fixed-policy cross-evaluation on our development task (a policy
-trained on this renderer, evaluated on observations from the
-`mujoco.Renderer` pipeline), episode returns were statistically
-indistinguishable (~1.2 SE at n=64 episodes per side).
+anyway. In a fixed-policy cross-evaluation on the development task this was
+extracted from (a policy trained on an earlier iteration of this renderer,
+evaluated on observations from the `mujoco.Renderer` pipeline), episode
+returns were statistically indistinguishable (~1.2 SE at n=64 episodes per
+side).
 
 Battle-tested paths: mesh/box/plane/sphere/cylinder/capsule geometry (all
 covered by the parity and stress tests), textures, one camera per env,
@@ -147,6 +150,8 @@ rendering (`so101_lift_vecenv.py`) and a PPO-from-pixels training script
 pip install -e ".[decimate,test]"
 pytest
 ```
+(Verified in a clean venv: install + full test suite pass with dependencies
+resolved from PyPI.)
 
 Requires macOS on Apple Silicon (wgpu selects the Metal backend
 automatically). The code is plain WebGPU and may work on other wgpu

@@ -153,7 +153,7 @@ struct BGFSOut {
 @fragment
 fn bg_fs(in: BGOut) -> BGFSOut {
     var out: BGFSOut;
-    out.color = textureSampleLevel(bg_tex, bg_samp, in.uv, i32(in.env), 0.0);
+    out.color = textureSampleLevel(bg_tex, bg_samp, in.uv, i32(in.env % {BG_LAYERS}u), 0.0);
     out.seg = 0u;
     return out;
 }
@@ -292,6 +292,9 @@ class BatchRenderer:
             self._proj_cam = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, camera)
             if self._proj_cam < 0:
                 raise ValueError(f"camera {camera!r} not found")
+        # Metal caps texture-array layers at 2048; beyond that, backgrounds
+        # cycle (env e uses layer e % 2048)
+        self._bg_layers = min(n_envs, 2048)
         adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
         self.device = adapter.request_device_sync()
         self._atlas = _Atlas(model)
@@ -447,7 +450,8 @@ class BatchRenderer:
         src = (_SHADER.replace("{N_GEOMS}", str(self.G))
                .replace("{TPR}", str(self.tpr))
                .replace("{TILE_W}", str(self.tw))
-               .replace("{TILE_H}", str(self.th)))
+               .replace("{TILE_H}", str(self.th))
+               .replace("{BG_LAYERS}", str(self._bg_layers)))
         shader = dev.create_shader_module(code=src)
         self.ebuf = dev.create_buffer(size=self.n * 96,
                                       usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
@@ -468,7 +472,7 @@ class BatchRenderer:
                            "rows_per_image": ai.shape[0]},
             (ai.shape[1], ai.shape[0], 1))
         self.bg_tex = dev.create_texture(
-            size=(self.tw, self.th, self.n), format=wgpu.TextureFormat.rgba8unorm,
+            size=(self.tw, self.th, self._bg_layers), format=wgpu.TextureFormat.rgba8unorm,
             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
         samp = dev.create_sampler(mag_filter=wgpu.FilterMode.linear,
                                   min_filter=wgpu.FilterMode.linear)
@@ -564,7 +568,7 @@ class BatchRenderer:
         for eid, im in zip(env_ids, images):
             rgba = np.dstack([im, np.full(im.shape[:2], 255, np.uint8)])
             self.device.queue.write_texture(
-                {"texture": self.bg_tex, "mip_level": 0, "origin": (0, 0, int(eid))},
+                {"texture": self.bg_tex, "mip_level": 0, "origin": (0, 0, int(eid) % self._bg_layers)},
                 rgba.tobytes(),
                 {"offset": 0, "bytes_per_row": self.tw * 4, "rows_per_image": self.th},
                 (self.tw, self.th, 1))

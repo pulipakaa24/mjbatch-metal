@@ -1,3 +1,25 @@
+"""BatchPixelVecEnv — N lift envs, threaded physics + one batched Metal render.
+
+SB3 VecEnv-compatible. Replicates SO101LiftEnv's reward/termination and
+SO101PixelEnv's DR (visual + physics) but vectorized:
+- per-env MjModel copies (physics DR mutates model fields)
+- physics stepped by a thread pool (mj_step releases the GIL)
+- observations rendered by mjbatch.BatchRenderer in ONE draw, composited
+Obs: {"image": (N,128,128,3) u8, "qpos": (N,6) f32}
+"""
+from __future__ import annotations
+
+import os
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import mujoco
+import numpy as np
+from gymnasium import spaces
+from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+
+from mjbatch import BatchRenderer
+
 TILE = 128
 
 
@@ -20,27 +42,7 @@ def _load_bg_dir():
                     idx = np.linspace(0, sz-1, TILE).astype(int)
                     bgs.append(im[np.ix_(idx, idx)].astype(np.uint8))
     return bgs
-"""BatchPixelVecEnv — N lift envs, threaded physics + one batched Metal render.
 
-SB3 VecEnv-compatible. Replicates SO101LiftEnv's reward/termination and
-SO101PixelEnv's DR (visual + physics) but vectorized:
-- per-env MjModel copies (physics DR mutates model fields)
-- physics stepped by a thread pool (mj_step releases the GIL)
-- observations rendered by MetalBatchRendererV1 in ONE draw, composited
-Obs: {"image": (N,128,128,3) u8, "qpos": (N,6) f32}
-"""
-from __future__ import annotations
-
-import os
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-
-import mujoco
-import numpy as np
-from gymnasium import spaces
-from stable_baselines3.common.vec_env.base_vec_env import VecEnv
-
-from mjbatch import BatchRenderer
 
 
 SCENE = os.environ.get("SCENE_XML", "/Users/adipu/so101Sim/mujoco_menagerie/robotstudio_so101/scene_box_rl.xml")
@@ -174,8 +176,7 @@ class BatchPixelVecEnv(VecEnv):
         return self._obs()
 
     def _obs(self):
-        imgs = self.renderer.render(self.datas, self._cam_id,
-                                    self._cam_pos, self._cam_quat,
+        imgs = self.renderer.render(self.datas, self._cam_pos, self._cam_quat,
                                     self._colors, self._lights)
         qpos = np.stack([d.qpos[self._arm_qadr] for d in self.datas]).astype(np.float32)
         return {"image": imgs, "qpos": qpos}
