@@ -105,11 +105,11 @@ On the simpler primitives benchmark scene, throughput reaches **~72,700
 env-frames/s at 64×64 with 1,024 environments** (pipelined readback) — see
 [`benchmarks/results_m4max.md`](benchmarks/results_m4max.md) for the full
 batch-size × resolution grid, the feature-coverage table versus madrona_mjx,
-and the provenance audit of the oft-cited madrona_mjx throughput figures
-(they turn out to be end-to-end physics-inclusive numbers on trivial scenes
-and datacenter hardware — not renderer-only comparisons — which is why this
-project publishes no cross-platform perf/watt claim and instead ships
-reproduce-it-yourself instructions). Numbers are from one machine; treat them as
+and notes on the oft-cited madrona_mjx throughput figures (they are
+end-to-end physics-inclusive numbers on trivial scenes and datacenter
+hardware, not renderer-only benchmarks — this project therefore publishes
+methodology-matched end-to-end numbers and reproduce-it-yourself
+instructions rather than a cross-platform perf/watt claim). Numbers are from one machine; treat them as
 indicative. Rendering stops being the bottleneck at these rates — in the
 end-to-end row the PPO update dominates.
 
