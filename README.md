@@ -181,8 +181,9 @@ backends (Vulkan/DX12); only Metal is tested.
 ## Status
 
 Alpha, extracted from a working sim-to-real project (2026-08). The API is
-small and may change. Issues and PRs welcome — especially parity reports
-from scenes unlike ours.
+small and may change. Development history, including the measurement trail
+behind every number and decision, is in [HISTORY.md](HISTORY.md). Issues
+and PRs welcome — especially parity reports from scenes unlike ours.
 
 ## License
 
