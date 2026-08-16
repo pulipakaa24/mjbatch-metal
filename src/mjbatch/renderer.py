@@ -576,18 +576,21 @@ class BatchRenderer:
         xf[:, :, 11] = pall[:, :, 2]
         xf[:, :, 12:16] = colors
         edata = np.zeros((self.n, 24), np.float32)
-        for e in range(self.n):
-            V = np.eye(4)
-            R = _quat_to_mat(cam_quat[e])
-            V[:3, :3] = R.T
-            V[:3, 3] = -R.T @ cam_pos[e]
-            vp = (P @ V).astype(np.float32)
-            col = e % self.tpr
-            row = e // self.tpr
-            edata[e, 0:16] = vp.T.reshape(-1)
-            edata[e, 16:20] = [-1.0 + (2 * col + 1) * sx, 1.0 - (2 * row + 1) * sy, sx, sy]
-            ld = np.asarray(light_dirs[e], dtype=np.float64)
-            edata[e, 20:23] = ld / (np.linalg.norm(ld) + 1e-9)
+        Rc = _quats_to_mats(np.asarray(cam_quat, np.float64))          # (N,3,3)
+        V = np.tile(np.eye(4), (self.n, 1, 1))
+        V[:, :3, :3] = np.transpose(Rc, (0, 2, 1))
+        V[:, :3, 3] = -np.einsum("nij,nj->ni", np.transpose(Rc, (0, 2, 1)),
+                                 np.asarray(cam_pos, np.float64))
+        vp = np.einsum("ij,njk->nik", P, V).astype(np.float32)         # (N,4,4)
+        edata[:, 0:16] = np.transpose(vp, (0, 2, 1)).reshape(self.n, 16)
+        ecol = np.arange(self.n) % self.tpr
+        erow = np.arange(self.n) // self.tpr
+        edata[:, 16] = -1.0 + (2 * ecol + 1) * sx
+        edata[:, 17] = 1.0 - (2 * erow + 1) * sy
+        edata[:, 18] = sx
+        edata[:, 19] = sy
+        ld = np.asarray(light_dirs, np.float64)
+        edata[:, 20:23] = ld / (np.linalg.norm(ld, axis=1, keepdims=True) + 1e-9)
         dev.queue.write_buffer(self.ebuf, 0, edata.tobytes())
         dev.queue.write_buffer(self.xbuf, 0, xf.tobytes())
 
@@ -646,3 +649,19 @@ def _quat_to_mat(q):
         [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
         [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
     ])
+
+
+def _quats_to_mats(q):
+    """(N,4) wxyz quaternions -> (N,3,3) rotation matrices, vectorized."""
+    w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+    M = np.empty((len(q), 3, 3))
+    M[:, 0, 0] = 1 - 2 * (y * y + z * z)
+    M[:, 0, 1] = 2 * (x * y - w * z)
+    M[:, 0, 2] = 2 * (x * z + w * y)
+    M[:, 1, 0] = 2 * (x * y + w * z)
+    M[:, 1, 1] = 1 - 2 * (x * x + z * z)
+    M[:, 1, 2] = 2 * (y * z - w * x)
+    M[:, 2, 0] = 2 * (x * z - w * y)
+    M[:, 2, 1] = 2 * (y * z + w * x)
+    M[:, 2, 2] = 1 - 2 * (x * x + y * y)
+    return M

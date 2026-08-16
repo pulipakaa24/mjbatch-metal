@@ -23,6 +23,15 @@ scope covers the domain-randomized, background-composited observation style
    frustum culling and LOD.
 5. **Shadows / richer shading** for users whose observations are NOT
    composited. Deliberate non-goal while compositing covers realism.
+6. **Dual geometry paths (monolithic unindexed vs indexed per-mesh),
+   auto-selected.** Considered and deferred (2026-08-16): the indexed path
+   cost ~25% peak on trivial scenes before camera-packing vectorization and
+   ~4% after (44.3k vs 46k env-fps @64px/1024 envs), while winning 3.3x on
+   real scenes, and current end-to-end consumers (PPO ~1.7k
+   steps/s) leave the renderer ~20x headroom either way. Revisit only when a
+   real workload puts rendering back on the critical path AND profiling
+   shows the monolithic path winning >=2x for it — the maintenance cost is
+   doubling the parity-tested surface, which is the expensive part.
 
 ## Out of scope
 

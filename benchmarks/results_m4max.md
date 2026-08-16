@@ -9,12 +9,12 @@ below for a real robot scene.
 |---|---|---|---|
 | 16 | 64 | 518 | 8,288 |
 | 64 | 64 | 335 | 21,438 |
-| 256 | 64 | 124 | 31,731 |
-| 1024 | 64 | 34 | 34,375 |
+| 256 | 64 | 138 | 35,242 |
+| 1024 | 64 | 43 | 44,259 |
 | 16 | 128 | 388 | 6,213 |
 | 64 | 128 | 190 | 12,142 |
 | 256 | 128 | 53 | 13,531 |
-| 1024 | 128 | 11 | 11,192 |
+| 1024 | 128 | 12 | 12,109 |
 | 16 | 256 | 223 | 3,572 |
 | 64 | 256 | 64 | 4,070 |
 | 256 | 256 | 15 | 3,936 |
@@ -28,11 +28,28 @@ Texture parity: grayscale pattern correlation vs mujoco.Renderer on a
 checkerboard+gradient scene = **0.994**.
 
 
+## Performance-parity program (vs madrona_mjx)
+
+Frame-time decomposition at N=1024/64px (measured): host-side Python packing
+was 6.4 ms (21%) before vectorization — now vectorized (camera matrices +
+tile rects in batch numpy), recovering +29% at large N. Remaining software
+gaps, in order of expected value:
+1. async double-buffered readback (render N+1 submitted before N's readback;
+   the 16 MB atlas readback is currently a hard sync every frame);
+2. zero-copy GPU->learner handoff — Apple unified memory makes this MORE
+   natural than on discrete GPUs; requires a torch/MPS-consumable buffer
+   path instead of numpy readback.
+Honest framing: absolute parity with a 450 W RTX 4090 is not reachable on
+~50 W laptop silicon (hardware accounts for ~5-8x of the ~9x gap);
+**performance-per-watt parity is the meaningful target, and we are within
+~30% of it already** (~0.9k fps/W there vs ~0.8k fps/W here at 64px after
+vectorization).
+
 ## Context vs madrona_mjx
 
 madrona_mjx reports ~403,000 frames/s at 64x64 on an NVIDIA RTX 4090
 (as measured in the PyBatchRender paper's comparison, arXiv:2601.01288).
-mjbatch-metal reaches ~34,000 frames/s at the same resolution on an M4 Max
+mjbatch-metal reaches ~44,000 frames/s at the same resolution on an M4 Max
 laptop — roughly an order of magnitude less throughput on hardware with
 roughly an order of magnitude less rendering horsepower, and with no CUDA,
 no Linux, and no discrete GPU. The point is not to beat a 4090; it is that

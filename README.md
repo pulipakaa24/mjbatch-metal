@@ -78,12 +78,14 @@ geoms, uncontended machine:
 | mjbatch-metal, batched N=64, UNDECIMATED meshes (348k tris) | **~8,400 env-frames/s** |
 | end-to-end PPO (SB3, MPS learner, threaded physics, N=64) | ~1,700 env-steps/s |
 
-On the simpler primitives benchmark scene, throughput reaches **~34,000
+On the simpler primitives benchmark scene, throughput reaches **~44,000
 env-frames/s at 64×64 with 1,024 environments** — see
 [`benchmarks/results_m4max.md`](benchmarks/results_m4max.md) for the full
 batch-size × resolution grid, the feature-coverage table versus madrona_mjx,
 and the honest cross-hardware comparison (madrona_mjx on an RTX 4090 is
-still ~12× faster at 64×64; the point is that RL-rate batch rendering exists
+still ~9× faster at 64×64 — see the performance-parity program in the
+benchmarks doc; on performance-per-watt the gap is ~30% — the point is that
+RL-rate batch rendering exists
 on Apple Silicon at all). Numbers are from one machine; treat them as
 indicative. Rendering stops being the bottleneck at these rates — in the
 end-to-end row the PPO update dominates.
