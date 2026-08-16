@@ -5,34 +5,25 @@ every feature ships with a parity test against `mujoco.Renderer`. Current
 scope covers the domain-randomized, background-composited observation style
 (realism from composited photos, not rendered detail).
 
-## Near-term (feasible additions, ordered by expected demand)
+## Planned
 
-1. ~~**Textures.**~~ DONE (2026-08-16): atlas-packed MuJoCo textures with
-   mesh/plane/box UVs, parity-tested (pattern correlation 0.994).
-2. ~~**Segmentation-ID output.**~~ DONE (2026-08-16): r32uint MRT target,
-   `return_seg=True`, parity-tested (per-geom IoU >0.85).
-3. **Non-square tiles / per-env resolution presets; camera intrinsics from
+1. **Non-square tiles / per-env resolution presets; camera intrinsics from
    `sensorsize`/`focal`** (currently fovy-based projection only).
+2. **LOD for Habitat-class scenes** (millions of triangles) — waits for a
+   real multi-resolution asset set to validate against; until then, manual
+   decimation levels are available via `decimate_faces`.
+3. **Direct GPU-tensor handoff** to a torch/MPS learner (Metal buffer <->
+   MPS tensor bridge; native-extension territory).
 
-## Larger rework (waits for a concrete use case)
+## Considered, not planned
 
-4. **High-complexity scenes**: indexed geometry + per-unique-mesh
-   instanced draws DONE; frustum culling DONE (`cull=True`, 2026-08-16).
-   Remaining for Habitat-class (millions of triangles): LOD — deferred
-   until a real multi-resolution asset set exists to validate against
-   (untested LOD would be feature theater; manual decimation levels are
-   available today via `decimate_faces`).
-5. **Shadows / richer shading** for users whose observations are NOT
-   composited. Deliberate non-goal while compositing covers realism.
-6. **Dual geometry paths (monolithic unindexed vs indexed per-mesh),
-   auto-selected.** Considered and deferred (2026-08-16): the indexed path
-   cost ~25% peak on trivial scenes before camera-packing vectorization and
-   ~4% after (44.3k vs 46k env-fps @64px/1024 envs), while winning 3.3x on
-   real scenes, and current end-to-end consumers (PPO ~1.7k
-   steps/s) leave the renderer ~20x headroom either way. Revisit only when a
-   real workload puts rendering back on the critical path AND profiling
-   shows the monolithic path winning >=2x for it — the maintenance cost is
-   doubling the parity-tested surface, which is the expensive part.
+- **Shadows / richer shading**: non-goal while the composited observation
+  style covers realism; revisit only for non-composited use cases.
+- **Dual geometry paths (monolithic vs indexed, auto-selected)**: the
+  indexed path costs ~4% peak on trivial scenes and wins 3.3x on real ones;
+  a second path would double the parity-tested surface for negligible gain.
+  Revisit only if a real workload puts rendering on the critical path AND
+  profiling shows a monolithic path winning >=2x for it.
 
 ## Out of scope
 

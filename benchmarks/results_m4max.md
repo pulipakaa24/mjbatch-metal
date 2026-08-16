@@ -20,10 +20,9 @@ below for a real robot scene.
 | 256 | 256 | 15 | 3,936 |
 | 1024 | 256 | 3 | 3,157 |
 
-High-complexity scene (SO-101 arm, UNDECIMATED, 348k faces -> 162k indexed
-verts): **8,365 env-frames/s** at 128 px, N=64. (The earlier unindexed
-architecture managed 2,540 on this scene and needed mesh decimation to reach
-6,000; indexed unique-mesh instancing made decimation optional.)
+High-complexity scene (SO-101 arm, undecimated, 348k faces -> 162k indexed
+verts): **8,365 env-frames/s** synchronous / **~19,000** pipelined, at
+128 px, N=64 — mesh decimation is optional, not required, at this scale.
 Texture parity: grayscale pattern correlation vs mujoco.Renderer on a
 checkerboard+gradient scene = **0.994**.
 
@@ -42,14 +41,16 @@ copied — on Apple Silicon's unified memory the mapped pointer IS the frame.
 
 ## Performance-parity program (vs madrona_mjx)
 
-Status after 2026-08-16 work:
-1. Host-side Python packing: DONE (vectorized; +29% at large N).
-2. Async double-buffered readback: DONE (`pipelined=True`; +65-75%; mapped
-   staging buffers exploit unified memory — the map is the zero-copy CPU
-   handoff).
-3. Remaining: direct GPU-tensor handoff to a torch/MPS learner without the
-   CPU-visible hop (needs a Metal buffer <-> MPS tensor bridge; no public
-   Python path exists today — native-extension territory).
+Current state:
+- Host-side per-frame packing is fully vectorized (batch camera matrices,
+  tile rects, transform gather).
+- Readback is async double-buffered (`pipelined=True`): one-frame latency,
+  mapped staging buffers — on unified memory the map is the zero-copy CPU
+  handoff.
+- The one remaining known software gap vs a GPU-resident stack: direct
+  GPU-tensor handoff to a torch/MPS learner without the CPU-visible hop
+  (needs a Metal buffer <-> MPS tensor bridge; no public Python path exists
+  today).
 
 ### End-to-end comparison vs MuJoCo Playground (MJX + madrona_mjx)
 
@@ -79,9 +80,7 @@ apples-to-oranges in both directions.
 Rendered examples (regenerate with `python benchmarks/make_gallery.py
 [robot_scene.xml]`): tiled batch atlas, DR/compositing grid, RGB+depth+seg
 triptych, and the texture-parity side-by-side live in `assets/` and are
-embedded in the README. A camera-authoring bug in the original cartpole
-benchmark scene (camera missed the scene entirely) was caught by LOOKING at
-these renders — the end-to-end numbers above are from the corrected scene.
+embedded in the README.
 
 ### Reproduce it yourself
 
