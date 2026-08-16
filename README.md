@@ -8,9 +8,9 @@ single GPU submission — the tiled-batch architecture of
 [madrona_mjx](https://github.com/shacklettbp/madrona_mjx) — implemented on
 Metal (via [wgpu](https://github.com/pygfx/wgpu-py)), with no CUDA and no
 translation layers. It exists to make **pixels-to-actions RL training
-practical on a Mac**: on an M4 Max it renders ~6,000+ composited 128×128
-observations per second, which turns a 25M-step PPO-from-pixels run into a
-~4-hour job.
+practical on a Mac**: on an M4 Max it renders ~8,000-12,000 composited
+128×128 observations per second on real robot scenes, which turns a
+25M-step PPO-from-pixels run into a ~4-hour job.
 
 ## Why this exists
 
@@ -69,21 +69,21 @@ training images). If you need photorealism, use a real engine.
 ## Performance (measured)
 
 Apple M4 Max (40-core GPU), 128×128 tiles, a 6-DoF arm scene with 20 visual
-geoms (meshes decimated to ≤1,500 faces each), uncontended machine:
+geoms, uncontended machine:
 
 | configuration | throughput |
 |---|---|
 | `mujoco.Renderer`, one view per call (baseline) | ~71 fps/process |
 | mjbatch-metal, single view | ~380 fps |
-| mjbatch-metal, batched N=64–256 | **~6,000–6,800 env-frames/s** |
+| mjbatch-metal, batched N=64, UNDECIMATED meshes (348k tris) | **~8,400 env-frames/s** |
 | end-to-end PPO (SB3, MPS learner, threaded physics, N=64) | ~1,700 env-steps/s |
 
-On the simpler primitives benchmark scene, throughput reaches **~46,000
+On the simpler primitives benchmark scene, throughput reaches **~34,000
 env-frames/s at 64×64 with 1,024 environments** — see
 [`benchmarks/results_m4max.md`](benchmarks/results_m4max.md) for the full
 batch-size × resolution grid, the feature-coverage table versus madrona_mjx,
 and the honest cross-hardware comparison (madrona_mjx on an RTX 4090 is
-still ~9× faster at 64×64; the point is that RL-rate batch rendering exists
+still ~12× faster at 64×64; the point is that RL-rate batch rendering exists
 on Apple Silicon at all). Numbers are from one machine; treat them as
 indicative. Rendering stops being the bottleneck at these rates — in the
 end-to-end row the PPO update dominates.
@@ -103,9 +103,10 @@ trained on this renderer, evaluated on observations from the
 `mujoco.Renderer` pipeline), episode returns were statistically
 indistinguishable (~1.2 SE at n=64 episodes per side).
 
-Battle-tested paths: mesh/box/plane geometry, one camera per env, 64–256
-envs, 96–256 px tiles. Present but less exercised: sphere/cylinder/capsule
-tessellation, non-square tiles.
+Battle-tested paths: mesh/box/plane/sphere/cylinder/capsule geometry (all
+covered by the parity and stress tests), textures, one camera per env,
+16–1,024 envs, 64–256 px tiles. Less exercised: non-square tiles, capsule
+UVs.
 
 ## Quickstart
 

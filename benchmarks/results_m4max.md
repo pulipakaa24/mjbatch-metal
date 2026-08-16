@@ -2,9 +2,8 @@
 
 Measured on an otherwise-idle machine (concurrent jobs SIGSTOPped), wgpu
 Metal backend, primitives test scene (3 geoms + plane; `benchmarks/bench.py`
-with no arguments). Scene complexity matters: the SO-101 arm scene
-(20 visual geoms, decimated meshes) reaches ~6,000-6,800 env-frames/s at
-128 px where this scene reaches ~12,000-17,000.
+with no arguments). Scene complexity matters: see the high-complexity row
+below for a real robot scene.
 
 | N envs | res | batches/s | env-frames/s |
 |---|---|---|---|
@@ -33,7 +32,7 @@ checkerboard+gradient scene = **0.994**.
 
 madrona_mjx reports ~403,000 frames/s at 64x64 on an NVIDIA RTX 4090
 (as measured in the PyBatchRender paper's comparison, arXiv:2601.01288).
-mjbatch-metal reaches ~46,000 frames/s at the same resolution on an M4 Max
+mjbatch-metal reaches ~34,000 frames/s at the same resolution on an M4 Max
 laptop — roughly an order of magnitude less throughput on hardware with
 roughly an order of magnitude less rendering horsepower, and with no CUDA,
 no Linux, and no discrete GPU. The point is not to beat a 4090; it is that
