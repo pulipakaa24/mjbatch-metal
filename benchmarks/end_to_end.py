@@ -28,7 +28,7 @@ CARTPOLE = """
   <option timestep="0.01"/>
   <worldbody>
     <light directional="true" pos="0 0 3" dir="0.2 0.2 -0.95"/>
-    <camera name="cam" pos="0 -2.2 0.7" quat="0.96 0.28 0 0"/>
+    <camera name="cam" pos="0 -2.2 0.7" quat="0.755 0.656 0 0"/>
     <geom name="rail" type="capsule" fromto="-1 0 0.4 1 0 0.4" size="0.02" rgba="0.6 0.6 0.6 1"/>
     <body pos="0 0 0.4">
       <joint name="slide" type="slide" axis="1 0 0" range="-1 1"/>

@@ -60,7 +60,7 @@ pipelined rendering). Same methodology, different hardware — disclosed:
 
 | scene class | theirs (datacenter GPU, MJX physics) | ours (M4 Max laptop, CPU physics) |
 |---|---|---|
-| cartpole-class, 64px | ~403,000 steps/s (CartpoleBalance) | **52,900-53,600 steps/s** (N=1024-4096; plateau = CPU physics-thread saturation) |
+| cartpole-class, 64px | ~403,000 steps/s (CartpoleBalance) | **52,600-53,100 steps/s** (N=1024-4096; plateau = CPU physics-thread saturation) |
 | arm pick-cube class, 128px | ~37,000 steps/s (PandaPickCubeCartesian, ~resolution-insensitive) | **16,957 steps/s** (SO-101 arm scene, N=64) |
 
 Reading: on trivial scenes their GPU-resident physics dominates (7.5x);
@@ -73,6 +73,15 @@ Note the provenance of the widely-cited "403k fps" number: it is this
 end-to-end CartpoleBalance figure from the MuJoCo Playground paper, not a
 renderer-only benchmark; render-only comparisons against it are
 apples-to-oranges in both directions.
+
+### Gallery
+
+Rendered examples (regenerate with `python benchmarks/make_gallery.py
+[robot_scene.xml]`): tiled batch atlas, DR/compositing grid, RGB+depth+seg
+triptych, and the texture-parity side-by-side live in `assets/` and are
+embedded in the README. A camera-authoring bug in the original cartpole
+benchmark scene (camera missed the scene entirely) was caught by LOOKING at
+these renders — the end-to-end numbers above are from the corrected scene.
 
 ### Reproduce it yourself
 

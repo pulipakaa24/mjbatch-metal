@@ -35,6 +35,11 @@ writing, no implementation runs natively on Apple GPUs:
 `mjbatch-metal` fills that gap with a small, auditable renderer written
 directly against WebGPU/Metal.
 
+![64 domain-randomized cartpole environments rendered as one tiled frame](assets/cartpole_atlas_64.png)
+
+*One frame, 64 environments: the tile atlas that a single `render()` call
+produces (cartpole-class scene, per-env colors, poses, and camera jitter).*
+
 ## What it does
 
 One `render()` call per simulation step, for all environments at once:
@@ -58,6 +63,22 @@ One `render()` call per simulation step, for all environments at once:
 - **Textures**: MuJoCo materials and textures (mesh UVs, planes, boxes) are
   atlas-packed and sampled in-shader; pattern parity vs `mujoco.Renderer`
   measured at 0.994 correlation. Per-env DR colors modulate textures.
+
+![16 domain-randomized robot tiles composited over varied backgrounds](assets/robot_dr_grid.png)
+
+*The intended observation style: a robot scene (SO-101, undecimated meshes)
+with per-env link colors, camera jitter, and greenscreen-composited
+backgrounds — solid, gradient, and noise here; photos of your real
+deployment scene in practice.*
+
+![RGB, depth, and segmentation outputs of the same textured scene](assets/rgb_depth_seg.png)
+
+*One render, three outputs: textured RGB, metric depth, segmentation IDs.*
+
+![Reference renderer vs mjbatch-metal on a textured scene](assets/tex_parity.png)
+
+*Left: `mujoco.Renderer`. Right: mjbatch-metal. Texture pattern correlation
+0.994; shading differs by design (see Validation).*
 
 ### What it deliberately does not do
 
