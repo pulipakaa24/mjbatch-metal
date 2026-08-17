@@ -82,9 +82,9 @@ deployment scene in practice.*
 
 ### What it deliberately does not do
 
-Lambertian smooth shading with textures — but no shadows and no photorealism.
-This is a renderer for **domain-randomized, background-composited RL
-observations** — the observation style validated by sim-to-real work such as
+No shadows, no global illumination, no photorealism. Shading is textured
+Lambertian — enough for **domain-randomized, background-composited RL
+observations**, the observation style validated by sim-to-real work such as
 [lerobot-sim2real](https://github.com/StoneT2000/lerobot-sim2real) (91.6%
 real-world zero-shot on a low-cost arm with plain rasterized + composited
 training images). If you need photorealism, use a real engine.
